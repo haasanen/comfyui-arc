@@ -22,7 +22,10 @@ sources you already trust for pip installs.
 
 ## Image
 
-`ghcr.io/haasanen/comfyui-arc` — tags: `main`, `sha-<commit>`, `v<semver>`.
+`ghcr.io/haasanen/comfyui-arc` — tags: `main`, `sha-<commit>`, `<semver>`
+(git tag `v0.1.0` publishes image tag `0.1.0` — the `v` is stripped; pin the
+published form). Current: **`0.1.0`** (built 2026-10-12, smoke-tested:
+`torch 2.14.1+xpu` imports).
 
 ## Device notes (Intel Arc)
 
@@ -37,7 +40,7 @@ sources you already trust for pip installs.
 
 ```yaml
   comfyui:
-    image: ghcr.io/haasanen/comfyui-arc:main
+    image: ghcr.io/haasanen/comfyui-arc:0.1.0
     container_name: comfyui
     restart: unless-stopped
     ports:
