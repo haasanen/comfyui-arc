@@ -35,7 +35,7 @@ RUN pip install -r /app/requirements.txt
 
 # 2) Official PyTorch XPU wheels on top, pinned, from PyTorch's own index.
 RUN pip install --index-url https://download.pytorch.org/whl/xpu \
-        torch==2.9.1+xpu torchvision==0.29.1+xpu \
+        torch==2.14.1+xpu torchvision==0.29.1+xpu \
     && python -c "import torch; assert hasattr(torch, 'xpu'), 'XPU backend missing'"
 
 VOLUME ["/models"]
