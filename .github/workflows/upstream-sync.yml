@@ -1,0 +1,85 @@
+name: Upstream sync (ComfyUI release -> bump, tag, build, smoke)
+
+# Daily: if upstream Comfy-Org/ComfyUI has a newer release than the pin in
+# the Dockerfile, bump ref+sha256, commit, tag v<version>, build, push image
+# <version>/main, smoke-test. A GITHUB_TOKEN push does not re-trigger
+# workflows, so this workflow does the whole chain in one run.
+# Known limit: the torch/torchvision XPU wheel pins stay manual; if a new
+# ComfyUI breaks them, the smoke test fails and this run goes red (no
+# half-released image).
+
+on:
+  schedule:
+    - cron: "13 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check upstream release
+        id: check
+        run: |
+          set -euo pipefail
+          cur=$(grep -oP 'ARG COMFY_REF=\K\S+' Dockerfile)
+          latest=$(curl -fsSL -H "authorization: Bearer $GITHUB_TOKEN" \
+            https://api.github.com/repos/comfy-org/ComfyUI/releases/latest \
+            | jq -r .tag_name)
+          echo "pinned=$cur latest=$latest"
+          if [ "$latest" = "$cur" ] || [ -z "$latest" ] || [ "$latest" = "null" ]; then
+            echo "up to date" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          ver=${latest#v}
+          sha=$(curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${latest}.tar.gz" \
+            | sha256sum | cut -d' ' -f1)
+          oldsha=$(grep -oP 'echo "\K[0-9a-f]{64}' Dockerfile)
+          sed -i "s|ARG COMFY_REF=.*|ARG COMFY_REF=${latest}|" Dockerfile
+          sed -i "s|${oldsha}|${sha}|" Dockerfile
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -aqm "upstream-sync: ComfyUI ${latest}"
+          git push
+          git tag "${latest}"
+          git push origin "${latest}"
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          echo "bumped ${cur} -> ${latest}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Login to GHCR
+        if: steps.check.outputs.version != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        if: steps.check.outputs.version != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: COMFY_REF=v${{ steps.check.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.check.outputs.version }}
+            ghcr.io/${{ github.repository }}:main
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+
+      - name: Smoke test (XPU wheels importable)
+        if: steps.check.outputs.version != ''
+        run: |
+          docker load -i /tmp/image.tar
+          docker run --rm "ghcr.io/${{ github.repository }}:${{ steps.check.outputs.version }}" \
+            python -c "import torch; assert torch.__version__.endswith('+xpu'); print('xpu ok', torch.__version__)"

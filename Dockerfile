@@ -12,7 +12,7 @@
 
 FROM python:3.12-slim
 
-ARG COMFY_REF=v0.39.0
+ARG COMFY_REF=v0.42.1
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
@@ -26,7 +26,7 @@ WORKDIR /app
 # ComfyUI from the official release tarball (pinned ref; CI verifies sha256).
 RUN curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${COMFY_REF}.tar.gz" \
         -o /tmp/comfy.tar.gz \
-    && echo "095d95805bdf36e73bbd15d6d2ee15fa627708679a2e67b5f467db4c57e7ff0a  /tmp/comfy.tar.gz" | sha256sum -c - \
+    && echo "8fb71e51c10c6261fe8dcfdbebe550a1d4ec6b74b6c57515e1b7313dbe4a215b  /tmp/comfy.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/comfy.tar.gz -C /app --strip-components=1 \
     && rm /tmp/comfy.tar.gz
 

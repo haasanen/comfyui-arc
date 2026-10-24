@@ -6,8 +6,8 @@ the NAS), assembled exclusively from vendor-official sources:
 | Component | Source | Pin |
 |---|---|---|
 | Base image | `python:3.12-slim` (Docker Hub official) | 3.12 |
-| PyTorch XPU | `download.pytorch.org/whl/xpu` (PyTorch's own index) | `torch==2.9.1+xpu`, `torchvision==0.29.1+xpu` |
-| ComfyUI | official `Comfy-Org/ComfyUI` GitHub release tarball | `v0.39.0`, sha256-pinned in the Dockerfile |
+| PyTorch XPU | `download.pytorch.org/whl/xpu` (PyTorch's own index) | `torch==2.14.1+xpu`, `torchvision==0.29.1+xpu` |
+| ComfyUI | official `Comfy-Org/ComfyUI` GitHub release tarball | `v0.42.1`, sha256-pinned in the Dockerfile |
 
 No third-party "prebuilt for Arc" images are involved. Upgrades = bump the
 pins in the Dockerfile (the checksum is recomputed by CI failing loudly if
@@ -23,8 +23,10 @@ sources you already trust for pip installs.
 ## Image
 
 `ghcr.io/haasanen/comfyui-arc` — tags: `main`, `sha-<commit>`, `<semver>`
-(git tag `v0.1.0` publishes image tag `0.1.0` — the `v` is stripped; pin the
-published form). Current: **`0.1.0`** (built 2026-10-12, smoke-tested:
+(git tag `v<upstream-version>` publishes image tag `<upstream-version>` — the
+`v` is stripped; pin the published form). Current: **`0.42.1`** (matches the
+pinned ComfyUI release; `0.1.0` was the last old-scheme tag, built 2026-10-12,
+smoke-tested:
 `torch 2.14.1+xpu` imports).
 
 ## Device notes (Intel Arc)
