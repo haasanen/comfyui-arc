@@ -1,10 +1,18 @@
 # sha256 <url> <local-name> — Intel GPU userspace stack, from Intel's
 # official GitHub release pages (oneapi-src/level-zero, intel/compute-runtime,
 # intel/intel-graphics-compiler). Driver+IGC are version-coupled:
-# libze-intel-gpu1 26.35 hard-depends intel-igc-core-2 == 2.41.5.
-# Driver/gmm hashes match Intel's published ww35.sum checksum file.
-# Bump all four together from a compute-runtime release set, then re-hash.
+# libze-intel-gpu1 26.35 hard-depends intel-igc-core-2 == 2.41.5;
+# intel-opencl-icd hard-depends intel-igc-opencl-2 == 2.41.5.
+# The NEO OpenCL runtime (intel-opencl-icd + igc-opencl) is required even
+# though torch runs on Level Zero: oneDNN's GPU kernel compiler errors
+# "OpenCL device not found" -> "could not create a primitive" without it
+# (live on A770, 2026-10-25).
+# opencl-icd hash matches Intel's ww35.sum; igc-opencl matches the digest
+# published in the IGC v2.41.5 release notes. Bump all together from one
+# compute-runtime release set, then re-hash.
 86b94be6f9b9e7a6738f56636f694bf2b42206297c2eb3d0dd5f78aa149a7c13 https://github.com/oneapi-src/level-zero/releases/download/v1.34.0/libze1_1.34.0%2Bu22.04_amd64.deb libze1_1.34.0+u22.04_amd64.deb
 6031a63d6e8a12ce61c14efc15f2c8e727061286e3820b8594e6d00615e04d54 https://github.com/intel/compute-runtime/releases/download/26.35.39758.10/libigdgmm12_22.10.0_amd64.deb libigdgmm12_22.10.0_amd64.deb
 0a6e64a663ae65a0fa02d6912ae3b6b37cf85b90c21cc423fd9fef70aaf4f628 https://github.com/intel/intel-graphics-compiler/releases/download/v2.41.5/intel-igc-core-2_2.41.5%2B22716_amd64.deb intel-igc-core-2_2.41.5+22716_amd64.deb
+779e1b9e88098eb25711e9a8f67c2752665bad22f134aa40ed5649f6e1b87058 https://github.com/intel/intel-graphics-compiler/releases/download/v2.41.5/intel-igc-opencl-2_2.41.5%2B22716_amd64.deb intel-igc-opencl-2_2.41.5+22716_amd64.deb
 c19a641b953d55aebbf1d51bec364a84bf629f985e02fbbe6dc70224c0e88470 https://github.com/intel/compute-runtime/releases/download/26.35.39758.10/libze-intel-gpu1_26.35.39758.10-0_amd64.deb libze-intel-gpu1_26.35.39758.10-0_amd64.deb
+61712caaddeba3d38e4f79e2a0fb23fea25596ca2d72c3144c6eea2331ec4301 https://github.com/intel/compute-runtime/releases/download/26.35.39758.10/intel-opencl-icd_26.35.39758.10-0_amd64.deb intel-opencl-icd_26.35.39758.10-0_amd64.deb

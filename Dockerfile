@@ -44,8 +44,11 @@ RUN mkdir -p /tmp/intel-debs && cd /tmp/intel-debs \
          && echo "$sha  $name" | sha256sum -c -; \
        done < /tmp/intel_debs.lock \
     && dpkg -i libigdgmm12_22.10.0_amd64.deb intel-igc-core-2_2.41.5+22716_amd64.deb \
+              intel-igc-opencl-2_2.41.5+22716_amd64.deb \
               libze1_1.34.0+u22.04_amd64.deb libze-intel-gpu1_26.35.39758.10-0_amd64.deb \
+              intel-opencl-icd_26.35.39758.10-0_amd64.deb \
     && ldconfig -p | grep -q libze_intel_gpu \
+    && ldconfig -p | grep -q libintelcl \
     && rm -rf /tmp/intel-debs /tmp/intel_debs.lock
 
 WORKDIR /app
