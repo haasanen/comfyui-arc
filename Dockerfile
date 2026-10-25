@@ -49,7 +49,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ocl-icd-libopen
               libze1_1.34.0+u22.04_amd64.deb libze-intel-gpu1_26.35.39758.10-0_amd64.deb \
               intel-opencl-icd_26.35.39758.10-0_amd64.deb \
     && ldconfig -p | grep -q libze_intel_gpu \
-    && ldconfig -p | grep -q libintelcl \
+    && test -f /etc/OpenCL/vendors/intel.icd \
+    && test -f /usr/lib/x86_64-linux-gnu/intel-opencl/libigdrcl.so \
     && rm -rf /tmp/intel-debs /tmp/intel_debs.lock /var/lib/apt/lists/*
 
 WORKDIR /app
