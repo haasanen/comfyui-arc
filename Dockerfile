@@ -10,7 +10,10 @@
 #   - requirements.txt lists bare torch/torchvision, so the XPU wheels are
 #     installed AFTER requirements to win (otherwise PyPI wheels clobber them)
 
-FROM python:3.12-slim
+# Bookworm base ON PURPOSE: Intel's GPU apt repo serves bookworm but not
+# trixie (CI proved: https://repositories.intel.com/gpu/dists/trixie/InRelease
+# -> 403, 2026-10-25). Do not bump this base without checking Intel repo support.
+FROM python:3.12-slim-bookworm
 
 ARG COMFY_REF=v0.42.1
 
