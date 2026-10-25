@@ -67,6 +67,7 @@ EXPOSE 8188
 
 # --oneapi-device-selector level_zero:0 = the only Intel GPU visible in the
 # container (compose maps ONLY the Arc's render node, so index 0 is the A770).
-CMD ["python", "/app/main.py", "--listen", "0.0.0.0", \
+ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
+CMD ["--listen", "0.0.0.0", \
      "--models-directory", "/models", \
      "--oneapi-device-selector", "level_zero:0"]
