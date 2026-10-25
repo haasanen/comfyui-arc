@@ -1,30 +1,36 @@
 #!/usr/bin/env python3
-"""Model provisioning for comfyui-arc — single source of truth.
+"""Model provisioning for comfyui-arc — single source of truth, agent-owned.
 
-Model sets live in model_sets.json (set name -> {files: {relpath: url}}).
-Every file in a set must be verified for the 16 GB A770 before it ships.
+Contract (owner, 2026-10-25): the image assumes NO models. The container
+never fetches anything by itself. The agent driving ComfyUI controls the
+model data entirely over this HTTP API: add set definitions, fetch, delete,
+swap. Image updates go through the owner's deploy gate; model management
+does not.
 
-Two ways in, both operator-free from ComfyUI's point of view:
-  CLI   : provision.py fetch a,b | list | serve
-  HTTP  : provision.py serve  (port $PROVISIONER_PORT, default 8189)
-          GET    /sets    -> {"available":[...], "installed":{name:{files,bytes}}}
-          GET    /status  -> {"busy":bool,"current":name|null,"log_tail":[...]}
-          POST   /models  {"set":"name"} -> 202 started | 409 busy | 400 unknown
-          DELETE /models?set=name        -> remove that set's files
+Registry lives on the models VOLUME at $MODELS_DIR/.provisioner/sets.json:
+  - image model_sets.json = seed defaults, applied as a base layer;
+  - volume registry overrides/removes them and survives image updates, so
+    the agent's model decisions outlive redeploys.
 
-Design notes:
-  - HTTP API exists because the agent driving ComfyUI has only LAN HTTP
-    (no docker socket, no compose) — model control must not require the
-    human as hands. Keyless, LAN-only, matching the strata convention.
-  - Downloads are resumable (curl -C - into .part, rename on success);
-    a set counts as installed when its first listed file exists.
-  - One job at a time; refuse delete while busy; refuse path escape
-    (no absolute paths / "..").
-  - New model files appear in ComfyUI's list without a restart
-    (its file-list cache has a short TTL).
+API (keyless, LAN-only — strata convention):
+  GET    /sets                 -> {"available":[...], "installed":{...}}
+  GET    /status               -> {"busy","current","log_tail"}
+  POST   /models {"set":name}  -> fetch 202 | 409 busy | 400 unknown
+  DELETE /models?set=name      -> delete that set's files
+  PUT    /sets/<name>          -> {"files":{"relpath":"https://..."}} add/override
+  DELETE /sets/<name>          -> remove a definition (image sets get a
+                                  removed-marker so image upgrades stay clean)
+
+URL policy: https only, host allowlist = huggingface.co (the agent verifies
+exact URLs/sizes/VRAM fit BEFORE registering; unverified URLs must not
+enter the registry). Downloads resumable (curl -C -); one job at a time;
+no absolute paths or ".."; no deletes outside the models dir.
+New model files show up in ComfyUI's list without restart (short cache TTL);
+workflows reference models by filename at run time, so swaps are per-run.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -33,24 +39,81 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SETS_PATH = os.environ.get("PROVISIONER_SETS", os.path.join(HERE, "model_sets.json"))
+IMAGE_SETS = os.environ.get("PROVISIONER_SETS", os.path.join(HERE, "model_sets.json"))
 MODELS_DIR = os.environ.get("PROVISIONER_MODELS_DIR", "/models")
+REGISTRY = os.path.join(MODELS_DIR, ".provisioner", "sets.json")
 PORT = int(os.environ.get("PROVISIONER_PORT", "8189"))
+ALLOWED_HOSTS = {"huggingface.co"}
+NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 _lock = threading.Lock()
 _state = {"busy": False, "current": None}
 _log = collections.deque(maxlen=200)
 
 
-def sets():
-    with open(SETS_PATH) as f:
+def image_sets():
+    with open(IMAGE_SETS) as f:
         return json.load(f)
+
+
+def volume_sets():
+    try:
+        with open(REGISTRY) as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except json.JSONDecodeError:
+        log("WARN volume registry unreadable, ignoring")
+        return {}
+
+
+def sets():
+    live = dict(image_sets())
+    for name, spec in volume_sets().items():
+        if spec.get("removed"):
+            live.pop(name, None)
+        else:
+            live[name] = spec
+    return live
+
+
+def save_volume(entry=None, drop=None):
+    v = volume_sets()
+    if drop:
+        if drop in image_sets():
+            v[drop] = {"removed": True}   # marker: beats future image upgrades
+        else:
+            v.pop(drop, None)
+    if entry:
+        name, spec = entry
+        v[name] = spec
+    os.makedirs(os.path.dirname(REGISTRY), exist_ok=True)
+    tmp = REGISTRY + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(v, f, indent=1, sort_keys=True)
+    os.replace(tmp, REGISTRY)
 
 
 def safe_join(rel):
     if os.path.isabs(rel) or ".." in rel.split("/"):
         raise ValueError(f"unsafe path in set: {rel}")
     return os.path.join(MODELS_DIR, rel)
+
+
+def valid_spec(spec):
+    if not isinstance(spec, dict) or not isinstance(spec.get("files"), dict) \
+            or not spec["files"]:
+        return "spec must be {\"files\": {relpath: url}}"
+    for rel, url in spec["files"].items():
+        try:
+            safe_join(rel)
+        except ValueError as e:
+            return str(e)
+        u = urlparse(str(url))
+        if u.scheme != "https" or u.netloc not in ALLOWED_HOSTS:
+            return f"url must be https and host in {sorted(ALLOWED_HOSTS)}: {url}"
+    return None
 
 
 def set_info(name):
@@ -74,7 +137,7 @@ def set_info(name):
             installed = False
     info = {"installed": installed, "files": files, "bytes": total}
     if unsafe:
-        info["error"] = "set contains unsafe path; fix model_sets.json"
+        info["error"] = "set contains unsafe path; fix the definition"
     return info
 
 
@@ -133,7 +196,7 @@ def start_fetch(name):
     return f"started: {name}", 202
 
 
-def delete_set(name):
+def delete_models(name):
     if name not in sets():
         return "unknown", 400
     with _lock:
@@ -161,6 +224,13 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _body(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            return json.loads(self.rfile.read(n) or b"{}")
+        except json.JSONDecodeError:
+            return None
+
     def do_GET(self):
         path = urlparse(self.path).path
         if path == "/sets":
@@ -179,23 +249,51 @@ class H(BaseHTTPRequestHandler):
         if urlparse(self.path).path != "/models":
             self._send(404, {"error": "use POST /models {\"set\": name}"})
             return
-        try:
-            n = int(self.headers.get("Content-Length") or 0)
-            payload = json.loads(self.rfile.read(n) or b"{}")
-        except json.JSONDecodeError:
+        payload = self._body()
+        if payload is None:
             self._send(400, {"error": "bad json"})
             return
         msg, code = start_fetch(str(payload.get("set", "")))
         self._send(code, {"status": msg})
 
+    def do_PUT(self):
+        u = urlparse(self.path)
+        if not u.path.startswith("/sets/"):
+            self._send(404, {"error": "use PUT /sets/<name>"})
+            return
+        name = u.path[len("/sets/"):]
+        if not NAME_RE.match(name):
+            self._send(400, {"error": f"bad set name {name!r} (^[a-z0-9][a-z0-9._-]{{0,63}}$)"})
+            return
+        spec = self._body()
+        if spec is None:
+            self._send(400, {"error": "bad json"})
+            return
+        err = valid_spec(spec)
+        if err:
+            self._send(400, {"error": err})
+            return
+        save_volume(entry=(name, spec))
+        log(f"definition {name}: registered {len(spec['files'])} file(s)")
+        self._send(201, {"status": f"registered: {name}"})
+
     def do_DELETE(self):
         u = urlparse(self.path)
-        if u.path != "/models":
-            self._send(404, {"error": "use DELETE /models?set=name"})
-            return
-        name = (parse_qs(u.query).get("set") or [""])[0]
-        msg, code = delete_set(name)
-        self._send(code, {"status": msg})
+        if u.path == "/models":
+            name = (parse_qs(u.query).get("set") or [""])[0]
+            msg, code = delete_models(name)
+            self._send(code, {"status": msg})
+        elif u.path.startswith("/sets/"):
+            name = u.path[len("/sets/"):]
+            if name not in sets():
+                self._send(400, {"error": "unknown set"})
+                return
+            save_volume(drop=name)
+            log(f"definition {name}: removed")
+            self._send(200, {"status": f"definition removed: {name} "
+                                      "(files kept; use DELETE /models?set= to free space)"})
+        else:
+            self._send(404, {"error": "use DELETE /models?set=name or DELETE /sets/<name>"})
 
     def log_message(self, format, *args):  # noqa: A002 - keep base signature
         pass  # keep stdout for provisioner logs only
@@ -224,7 +322,7 @@ def main(argv):
         sys.exit(rc)
     elif cmd == "serve":
         log(f"provisioner on :{PORT}, models={MODELS_DIR}, "
-            f"sets={sorted(sets())}")
+            f"registry={REGISTRY}, sets={sorted(sets())}")
         ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
     else:
         print(f"usage: provision.py [list|fetch a,b|serve]", file=sys.stderr)
