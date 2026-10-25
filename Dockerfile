@@ -38,7 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # The driver supports DG2 (A770) on both i915 and xe kernel drivers, so the
 # NAS host stays on i915 (Jellyfin/Frigate share that card).
 COPY scripts/intel_debs.lock /tmp/intel_debs.lock
-RUN mkdir -p /tmp/intel-debs && cd /tmp/intel-debs \
+RUN apt-get update && apt-get install -y --no-install-recommends ocl-icd-libopencl1 \
+    && mkdir -p /tmp/intel-debs && cd /tmp/intel-debs \
     && while read -r sha url name; do \
          curl -fsSL -o "$name" "$url" \
          && echo "$sha  $name" | sha256sum -c -; \
@@ -49,7 +50,7 @@ RUN mkdir -p /tmp/intel-debs && cd /tmp/intel-debs \
               intel-opencl-icd_26.35.39758.10-0_amd64.deb \
     && ldconfig -p | grep -q libze_intel_gpu \
     && ldconfig -p | grep -q libintelcl \
-    && rm -rf /tmp/intel-debs /tmp/intel_debs.lock
+    && rm -rf /tmp/intel-debs /tmp/intel_debs.lock /var/lib/apt/lists/*
 
 WORKDIR /app
 
