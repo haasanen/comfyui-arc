@@ -67,9 +67,15 @@ RUN pip install --index-url https://download.pytorch.org/whl/xpu \
 
 VOLUME ["/models"]
 
-# Helper scripts (fetch_models.sh) — baked in so model setup against a
-# running container is ONE command: docker exec comfyui sh /app/scripts/fetch_models.sh
+# Helper scripts (provisioner API + entrypoint) — model control over LAN HTTP.
 COPY scripts/ /app/scripts/
+
+# Minimal first-party custom node: ArcAttentionBackend. torch SDPA with a
+# mask crashes on XPU/oneDNN ("could not create a primitive", oneDNN -6;
+# ComfyUI issue #5270) — this exposes ComfyUI's registered chunked
+# pure-torch backends (split/sub_quad) that never touch SDPA. No third-party
+# code; it is a two-line patch call against ComfyUI's own attention registry.
+COPY custom_nodes/arc_attention.py /app/custom_nodes/arc_attention.py
 
 EXPOSE 8188
 

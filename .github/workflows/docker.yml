@@ -70,3 +70,10 @@ jobs:
           docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" \
             sh -c 'sleep 2; \
                    python -c "import urllib.request,json; d=json.load(urllib.request.urlopen(\"http://127.0.0.1:8189/sets\")); assert \"z-image\" in d[\"available\"], d; print(\"provisioner ok\", d[\"available\"])"'
+      - name: Smoke test (Arc attention backend node loads; split backend registered)
+        run: |
+          # XPU masked SDPA crashes in oneDNN (could not create a primitive).
+          # The image must ship the ArcAttentionBackend node AND the chunked
+          # pure-torch 'split' backend must be resolvable through it.
+          docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" \
+            python -c "import importlib.util as u; s=u.spec_from_file_location('arc','/app/custom_nodes/arc_attention.py'); m=u.module_from_spec(s); s.loader.exec_module(m); assert 'ArcAttentionBackend' in m.NODE_CLASS_MAPPINGS; import comfy.ldm.modules.attention as a; assert a.get_attention_function('split', None) is not None, 'split backend missing'; print('arc node ok, backends:', m._AVAILABLE)"
