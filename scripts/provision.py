@@ -215,6 +215,10 @@ def main(argv):
             name = name.strip()
             if not name or name in ("0", "none"):
                 continue
+            if name not in sets():
+                log(f"unknown model set: {name} (known: {sorted(sets())})")
+                rc = 1
+                continue
             if not fetch_set(name):
                 rc = 1
         sys.exit(rc)

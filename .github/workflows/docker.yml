@@ -60,10 +60,13 @@ jobs:
           # driver (libze_intel_gpu) or device enumeration is 0 on a real card.
           docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" \
             sh -c 'ldconfig -p | grep -q libze_intel_gpu && echo "L0 gpu driver ok" && test -f /app/scripts/provision.py && test -f /app/scripts/model_sets.json && echo "scripts ok"'
-      - name: Smoke test (provisioner HTTP API answers)
+      - name: Smoke test (provisioner HTTP API answers via entrypoint)
         run: |
           # Model control is an HTTP surface (the agent driving ComfyUI has
-          # only LAN HTTP — no shell). Prove it answers inside the image.
+          # only LAN HTTP — no shell). The entrypoint itself starts the
+          # provisioner, so a plain `sh -c` probe proves both entrypoint and
+          # API work inside the built image. (No second `serve` here: it
+          # would collide with the entrypoint's instance on :8189.)
           docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" \
-            sh -c 'python /app/scripts/provision.py serve & sleep 2; \
+            sh -c 'sleep 2; \
                    python -c "import urllib.request,json; d=json.load(urllib.request.urlopen(\"http://127.0.0.1:8189/sets\")); assert \"z-image\" in d[\"available\"], d; print(\"provisioner ok\", d[\"available\"])"'
