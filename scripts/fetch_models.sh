@@ -1,9 +1,11 @@
 #!/bin/sh
 # One-shot model fetch for Z-Image Turbo (official Comfy-Org files, Apache-2.0).
-# Run INSIDE the comfyui container with the models volume mounted:
-#   docker run --rm -v /ssd/comfyui-data/models:/models \
-#     ghcr.io/haasanen/comfyui-arc:0.1.0 sh /app/scripts/fetch_models.sh
-# or: docker cp this script into the running container and exec it.
+# Runs INSIDE the comfyui container with the models volume mounted. Since
+# image 0.42.1-h1 the script is baked in at /app/scripts/, so against a
+# running container it is ONE command:
+#   docker exec comfyui sh /app/scripts/fetch_models.sh
+# (Older images without /app/scripts: pipe it in from the host —
+#   curl -sL https://raw.githubusercontent.com/haasanen/comfyui-arc/main/scripts/fetch_models.sh | docker exec -i comfyui sh)
 #
 # Chosen for A770 16 GB (no custom nodes needed — all native ComfyUI formats):
 #   diffusion: int8_convrot 6.2 GB (native int8, faster than GGUF per upstream)

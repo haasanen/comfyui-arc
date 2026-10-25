@@ -53,3 +53,10 @@ jobs:
         run: |
           docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" \
             python -c "import torch; assert torch.__version__.endswith('+xpu'); print('xpu ok', torch.__version__)"
+      - name: Smoke test (Level Zero GPU driver + baked scripts present)
+        run: |
+          # Regression pin for the 2026-10-25 crash-loop: the wheels ship the
+          # Level Zero LOADER only; the image must also carry the Intel GPU
+          # driver (libze_intel_gpu) or device enumeration is 0 on a real card.
+          docker run --rm "${{ fromJSON(steps.meta.outputs.json).tags[0] }}" \
+            sh -c 'ldconfig -p | grep -q libze_intel_gpu && echo "L0 gpu driver ok" && test -f /app/scripts/fetch_models.sh && echo "scripts ok"'

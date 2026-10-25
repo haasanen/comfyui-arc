@@ -18,7 +18,23 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 curl ca-certificates \
+        libgl1 libglib2.0-0 curl ca-certificates gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Intel GPU userspace compute stack (Level Zero driver for the Arc) from
+# Intel's own apt repo — the +xpu torch wheels ship only the Level Zero
+# LOADER; without libze_intel_gpu.so the kernel driver has nothing to
+# talk to and torch.xpu.device_count() is 0 (observed live 2026-10-25:
+# ComfyUI crash-loop "XPU device count is zero"). Vendor-official repo;
+# intel-level-zero-gpu supports DG2 (A770) on both i915 and xe KMDs, so
+# the NAS host can stay on i915 (Jellyfin/Frigate share that card).
+RUN . /etc/os-release \
+    && curl -fsSL https://repositories.intel.com/gpu/intel-graphics.key \
+        | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
+    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ ${VERSION_CODENAME} release" \
+        > /etc/apt/sources.list.d/intel-gpu.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends level-zero intel-level-zero-gpu \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -39,6 +55,11 @@ RUN pip install --index-url https://download.pytorch.org/whl/xpu \
     && python -c "import torch; assert hasattr(torch, 'xpu'), 'XPU backend missing'"
 
 VOLUME ["/models"]
+
+# Helper scripts (fetch_models.sh) — baked in so model setup against a
+# running container is ONE command: docker exec comfyui sh /app/scripts/fetch_models.sh
+COPY scripts/ /app/scripts/
+
 EXPOSE 8188
 
 # --oneapi-device-selector level_zero:0 = the only Intel GPU visible in the
