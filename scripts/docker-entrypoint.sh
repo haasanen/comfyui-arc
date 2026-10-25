@@ -1,26 +1,30 @@
 #!/bin/sh
-# ENTRYPOINT for comfyui-arc. Strata-style first-run: fetch the model sets
-# named by FETCH_MODELS (default: z-image) once, then serve.
+# ENTRYPOINT for comfyui-arc.
 #
-# Guards:
-#  - Only the default server launch provisions: recognised by the first CMD
-#    argument starting with "--" (CMD starts with --listen). Any other first
-#    argument (python -c ..., sh -c ..., --entrypoint overrides) is a
-#    diagnostic command and is exec'd verbatim WITHOUT downloading anything.
-#  - FETCH_MODELS=0 (or none) disables provisioning entirely (pre-seeded
-#    volume, offline host); the fetch script itself is idempotent + resumable.
+# 1) Provisioner HTTP API (model control over LAN, no shell needed):
+#    provision.py serve on :8189 — GET /sets, GET /status,
+#    POST /models {"set":...}, DELETE /models?set=... Keyless by design
+#    (LAN-only, strata convention). Disable with PROVISIONER_DISABLE=1.
+# 2) Strata-style first-run provisioning: fetch FETCH_MODELS sets (default
+#    z-image; "0"/none disables) before serving. Idempotent + resumable.
+# 3) Only the default server launch (first CMD arg starts with "--")
+#    provisions; any other first argument (python -c ..., sh -c ...,
+#    --entrypoint overrides) execs verbatim WITHOUT network, so CI smokes
+#    and diagnostics never download anything.
 set -eu
 
 first="${1:-}"
 
+if [ "${PROVISIONER_DISABLE:-0}" != "1" ] && [ -f /app/scripts/provision.py ]; then
+    python /app/scripts/provision.py serve &
+fi
+
 if [ "${first#--}" != "$first" ]; then
-    # default server launch
     sets="${FETCH_MODELS:-z-image}"
     if [ "$sets" != "0" ] && [ "$sets" != "none" ]; then
         sh /app/scripts/fetch_models.sh "$sets"
     fi
     exec python /app/main.py "$@"
 else
-    # explicit command override (diagnostics, shells)
     exec "$@"
 fi

@@ -10,10 +10,12 @@
 #   - requirements.txt lists bare torch/torchvision, so the XPU wheels are
 #     installed AFTER requirements to win (otherwise PyPI wheels clobber them)
 
-# Bookworm base ON PURPOSE: Intel's GPU apt repo serves bookworm but not
-# trixie (CI proved: https://repositories.intel.com/gpu/dists/trixie/InRelease
-# -> 403, 2026-10-25). Do not bump this base without checking Intel repo support.
-FROM python:3.12-slim-bookworm
+# Trixie base ON PURPOSE (2026-10-25): Intel's GitHub-release GPU debs
+# (libze-intel-gpu1, intel-igc-core-2) need glibc >= 2.38; Debian bookworm
+# ships 2.36, trixie ships 2.41. Also repositories.intel.com's apt repo is
+# CloudFront-blocked from CI (403 for every dist from runner IPs) — so no
+# Intel apt repo at all; we install Intel's own release .debs, hash-locked.
+FROM python:3.12-slim-trixie
 
 ARG COMFY_REF=v0.42.1
 
@@ -21,24 +23,30 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 curl ca-certificates gnupg \
+        libgl1 libglib2.0-0 curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Intel GPU userspace compute stack (Level Zero driver for the Arc) from
-# Intel's own apt repo — the +xpu torch wheels ship only the Level Zero
-# LOADER; without libze_intel_gpu.so the kernel driver has nothing to
-# talk to and torch.xpu.device_count() is 0 (observed live 2026-10-25:
-# ComfyUI crash-loop "XPU device count is zero"). Vendor-official repo;
-# intel-level-zero-gpu supports DG2 (A770) on both i915 and xe KMDs, so
-# the NAS host can stay on i915 (Jellyfin/Frigate share that card).
-RUN . /etc/os-release \
-    && curl -fsSL https://repositories.intel.com/gpu/intel-graphics.key \
-        | gpg --dearmor --output /usr/share/keyrings/intel-graphics.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/intel-graphics.gpg] https://repositories.intel.com/gpu/ ${VERSION_CODENAME} release" \
-        > /etc/apt/sources.list.d/intel-gpu.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends level-zero intel-level-zero-gpu \
-    && rm -rf /var/lib/apt/lists/*
+# Intel GPU userspace compute stack (Level Zero driver for the Arc). The
+# +xpu torch wheels ship only the Level Zero LOADER; without the driver
+# (libze_intel_gpu.so) torch.xpu.device_count() is 0 and ComfyUI crash-loops
+# (observed live 2026-10-25). Intel's apt repo is CloudFront-blocked from CI
+# (403 on all dists), so we install the SAME debs Intel publishes on its
+# official GitHub releases, hash-locked in scripts/intel_debs.lock (driver
+# hashes cross-checked against Intel's published ww35.sum). Versions pinned:
+# loader 1.34.0, driver 26.35.39758.10, IGC 2.41.5, gmm 22.10.0 — driver
+# hard-pins IGC == 2.41.5, keep them in step (see intel/compute-runtime).
+# The driver supports DG2 (A770) on both i915 and xe kernel drivers, so the
+# NAS host stays on i915 (Jellyfin/Frigate share that card).
+COPY scripts/intel_debs.lock /tmp/intel_debs.lock
+RUN mkdir -p /tmp/intel-debs && cd /tmp/intel-debs \
+    && while read -r sha url name; do \
+         curl -fsSL -o "$name" "$url" \
+         && echo "$sha  $name" | sha256sum -c -; \
+       done < /tmp/intel_debs.lock \
+    && dpkg -i libigdgmm12_22.10.0_amd64.deb intel-igc-core-2_2.41.5+22716_amd64.deb \
+              libze1_1.34.0+u22.04_amd64.deb libze-intel-gpu1_26.35.39758.10-0_amd64.deb \
+    && ldconfig -p | grep -q libze_intel_gpu \
+    && rm -rf /tmp/intel-debs /tmp/intel_debs.lock
 
 WORKDIR /app
 
