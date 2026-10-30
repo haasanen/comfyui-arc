@@ -17,7 +17,7 @@
 # Intel apt repo at all; we install Intel's own release .debs, hash-locked.
 FROM python:3.12-slim-trixie
 
-ARG COMFY_REF=v0.42.1
+ARG COMFY_REF=v0.43.0
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
@@ -58,7 +58,7 @@ WORKDIR /app
 # ComfyUI from the official release tarball (pinned ref; CI verifies sha256).
 RUN curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${COMFY_REF}.tar.gz" \
         -o /tmp/comfy.tar.gz \
-    && echo "8fb71e51c10c6261fe8dcfdbebe550a1d4ec6b74b6c57515e1b7313dbe4a215b  /tmp/comfy.tar.gz" | sha256sum -c - \
+    && echo "8a496a7d82bd343cafdb2b867857fe8c5140e3cd9ec5cf46c6277ccb7466f202  /tmp/comfy.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/comfy.tar.gz -C /app --strip-components=1 \
     && rm /tmp/comfy.tar.gz
 
