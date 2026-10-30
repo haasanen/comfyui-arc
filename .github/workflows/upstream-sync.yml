@@ -70,21 +70,29 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build
         if: steps.check.outputs.version != ''
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          build-args: COMFY_REF=v${{ steps.check.outputs.version }}
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ steps.check.outputs.version }}
-            ghcr.io/${{ github.repository }}:main
-          outputs: type=docker,dest=/tmp/image.tar
+        run: |
+          set -euo pipefail
+          IMG=ghcr.io/${{ github.repository }}
+          VER=${{ steps.check.outputs.version }}
+          docker build -t "$IMG:$VER" -t "$IMG:main" \
+            --build-arg COMFY_REF="v$VER" .
 
       - name: Smoke test (XPU wheels importable)
         if: steps.check.outputs.version != ''
         run: |
-          docker load -i /tmp/image.tar
-          docker run --rm "ghcr.io/${{ github.repository }}:${{ steps.check.outputs.version }}" \
+          set -euo pipefail
+          IMG=ghcr.io/${{ github.repository }}
+          VER=${{ steps.check.outputs.version }}
+          docker run --rm "$IMG:$VER" \
             python -c "import torch; assert torch.__version__.endswith('+xpu'); print('xpu ok', torch.__version__)"
+
+      - name: Push (only after smoke passes)
+        if: steps.check.outputs.version != ''
+        run: |
+          set -euo pipefail
+          IMG=ghcr.io/${{ github.repository }}
+          VER=${{ steps.check.outputs.version }}
+          docker push "$IMG:$VER"
+          docker push "$IMG:main"
