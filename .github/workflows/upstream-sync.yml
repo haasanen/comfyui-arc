@@ -38,11 +38,16 @@ jobs:
             https://api.github.com/repos/comfy-org/ComfyUI/releases/latest \
             | jq -r .tag_name)
           echo "pinned=$cur latest=$latest"
-          if [ "$latest" = "$cur" ] || [ -z "$latest" ] || [ "$latest" = "null" ]; then
-            echo "up to date" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$latest" ] || [ "$latest" = "null" ]; then
+            echo "no upstream release found" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           ver=${latest#v}
+          echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$cur" ]; then
+            echo "up to date (${latest}) — building anyway" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           sha=$(curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${latest}.tar.gz" \
             | sha256sum | cut -d' ' -f1)
           oldsha=$(grep -oP 'echo "\K[0-9a-f]{64}' Dockerfile)
@@ -75,8 +80,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.check.outputs.version }}
             ghcr.io/${{ github.repository }}:main
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           outputs: type=docker,dest=/tmp/image.tar
 
       - name: Smoke test (XPU wheels importable)
