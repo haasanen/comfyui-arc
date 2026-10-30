@@ -29,6 +29,8 @@ jobs:
 
       - name: Check upstream release
         id: check
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
         run: |
           set -euo pipefail
           cur=$(grep -oP 'ARG COMFY_REF=\K\S+' Dockerfile)
