@@ -65,9 +65,21 @@ RUN curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${COMFY_R
 # 1) ComfyUI's deps first (this pulls CPU torch from PyPI — replaced next).
 RUN pip install -r /app/requirements.txt
 
-# 2) Official PyTorch XPU wheels on top, pinned, from PyTorch's own index.
-RUN pip install --index-url https://download.pytorch.org/whl/xpu \
-        torch==2.14.1+xpu torchvision==0.29.1+xpu \
+# 1b) Hold the GPU probe libs at the versions proven healthy on Arc (owner-
+# verified live on 0.42.1-h7). comfy-kitchen 0.2.40/comfy-aimdo 0.6.0 boot on
+# 0.43.0 makes torch.xpu.device_count() return 0 on our NAS: the Level Zero
+# debug trace shows the driver loads, then every zeInitDrivers returns
+# ZE_RESULT_ERROR_UNINITIALIZED inside the full boot (plain `import torch`
+# still sees the device — the poison is in the 0.43 probe/auto-detect path).
+# Bump these in step with an upstream fix; repro trace lives in wiki
+# entities/comfyui-arc.md.
+RUN pip install comfy-kitchen==0.2.39 comfy-aimdo==0.5.6
+
+# 2) Official PyTorch XPU wheels on top, hash-pinned (the +xpu index rotates a
+# single file per version silently — pin the exact bytes proven on the NAS,
+# captured 2026-10-30, else a silent republish swaps our runtime).
+RUN pip install "torch @ https://download.pytorch.org/whl/xpu/torch-2.14.1%2Bxpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=a9fe5a5bffca6d6430028c532c010b9eae045489c069f77e6db3dc9f7d0cc59b" \
+        "torchvision @ https://download.pytorch.org/whl/xpu/torchvision-0.29.1%2Bxpu-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=25c8cbd25528a04f8929333634d293868f1e4e826c6456a19e854e2a54081d72" \
     && python -c "import torch; assert hasattr(torch, 'xpu'), 'XPU backend missing'"
 
 VOLUME ["/models"]
