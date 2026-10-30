@@ -79,15 +79,17 @@ RUN pip install comfy-kitchen==0.2.39 comfy-aimdo==0.5.6
 # (the +xpu index silently rotates the single file per version — pin the
 # exact bytes proven on the NAS, captured 2026-10-30). Dependency resolution
 # keeps the xpu index: torch needs triton-xpu~=3.8.0 which PyPI does not carry.
-RUN curl -fsSL -o /tmp/torch.whl \
+RUN TORCHWHL="torch-2.14.1+xpu-cp312-cp312-manylinux_2_28_x86_64.whl" && \
+    TVWHL="torchvision-0.29.1+xpu-cp312-cp312-manylinux_2_28_x86_64.whl" && \
+    curl -fsSL -o "/tmp/$TORCHWHL" \
         "https://download.pytorch.org/whl/xpu/torch-2.14.1%2Bxpu-cp312-cp312-manylinux_2_28_x86_64.whl" \
-    && echo "a9fe5a5bffca6d6430028c532c010b9eae045489c069f77e6db3dc9f7d0cc59b  /tmp/torch.whl" | sha256sum -c - \
-    && curl -fsSL -o /tmp/torchvision.whl \
+    && echo "a9fe5a5bffca6d6430028c532c010b9eae045489c069f77e6db3dc9f7d0cc59b  /tmp/$TORCHWHL" | sha256sum -c - \
+    && curl -fsSL -o "/tmp/$TVWHL" \
         "https://download.pytorch.org/whl/xpu/torchvision-0.29.1%2Bxpu-cp312-cp312-manylinux_2_28_x86_64.whl" \
-    && echo "25c8cbd25528a04f8929333634d293868f1e4e826c6456a19e854e2a54081d72  /tmp/torchvision.whl" | sha256sum -c - \
+    && echo "25c8cbd25528a04f8929333634d293868f1e4e826c6456a19e854e2a54081d72  /tmp/$TVWHL" | sha256sum -c - \
     && pip install --extra-index-url https://download.pytorch.org/whl/xpu \
-        /tmp/torch.whl /tmp/torchvision.whl \
-    && rm /tmp/torch.whl /tmp/torchvision.whl \
+        "/tmp/$TORCHWHL" "/tmp/$TVWHL" \
+    && rm "/tmp/$TORCHWHL" "/tmp/$TVWHL" \
     && python -c "import torch; assert hasattr(torch, 'xpu'), 'XPU backend missing'"
 
 VOLUME ["/models"]
