@@ -50,7 +50,7 @@ jobs:
           fi
           sha=$(curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${latest}.tar.gz" \
             | sha256sum | cut -d' ' -f1)
-          oldsha=$(grep -oP 'echo "\K[0-9a-f]{64}' Dockerfile)
+          oldsha=$(grep -oP 'echo "\K[0-9a-f]{64}(?=  /tmp/comfy\.tar\.gz)' Dockerfile)
           sed -i "s|ARG COMFY_REF=.*|ARG COMFY_REF=${latest}|" Dockerfile
           sed -i "s|${oldsha}|${sha}|" Dockerfile
           git config user.name "github-actions[bot]"

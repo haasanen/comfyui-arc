@@ -73,7 +73,7 @@ RUN pip install -r /app/requirements.txt
 # still sees the device — the poison is in the 0.43 probe/auto-detect path).
 # Bump these in step with an upstream fix; repro trace lives in wiki
 # entities/comfyui-arc.md.
-RUN pip install comfy-kitchen==0.2.39 comfy-aimdo==0.5.6
+RUN pip install comfy-kitchen==0.2.40 comfy-aimdo==0.6.0
 
 # 2) Official PyTorch XPU wheels, sha256-verified then installed from disk
 # (the +xpu index silently rotates the single file per version — pin the
