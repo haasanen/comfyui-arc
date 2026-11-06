@@ -2,8 +2,10 @@ name: Upstream sync (ComfyUI release -> bump, tag, build, smoke)
 
 # Daily: if upstream Comfy-Org/ComfyUI has a newer release than the pin in
 # the Dockerfile, bump ref+sha256, commit, tag v<version>, build, push image
-# <version>/main, smoke-test. A GITHUB_TOKEN push does not re-trigger
-# workflows, so this workflow does the whole chain in one run.
+# <version>/main, smoke-test, then AUTO-PROMOTE <version>-h1 (deploy artifact,
+# same digest, git tag v<version>-h1). A GITHUB_TOKEN push does not re-trigger
+# workflows, so this workflow does the whole chain in one run. Deploys remain
+# owner-gated: NAS compose pins the -h<N> tag; owner flips the pin.
 # Known limit: the torch/torchvision XPU wheel pins stay manual; if a new
 # ComfyUI breaks them, the smoke test fails and this run goes red (no
 # half-released image).
@@ -96,3 +98,18 @@ jobs:
           VER=${{ steps.check.outputs.version }}
           docker push "$IMG:$VER"
           docker push "$IMG:main"
+
+      - name: Auto-promote h1 deploy artifact
+        if: steps.check.outputs.version != ''
+        run: |
+          set -euo pipefail
+          IMG=ghcr.io/${{ github.repository }}
+          VER=${{ steps.check.outputs.version }}
+          docker tag "$IMG:$VER" "$IMG:${VER}-h1"
+          docker push "$IMG:${VER}-h1"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git rev-parse -q --verify "refs/tags/v${VER}-h1" >/dev/null; then
+            git tag -m "auto-promote ${VER} -> deploy artifact ${VER}-h1" "v${VER}-h1"
+            git push origin "v${VER}-h1"
+          fi
