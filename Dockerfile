@@ -41,7 +41,7 @@ COPY scripts/intel_debs.lock /tmp/intel_debs.lock
 RUN apt-get update && apt-get install -y --no-install-recommends ocl-icd-libopencl1 \
     && mkdir -p /tmp/intel-debs && cd /tmp/intel-debs \
     && while read -r sha url name; do \
-         curl -fsSL -o "$name" "$url" \
+         curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "$name" "$url" \
          && echo "$sha  $name" | sha256sum -c -; \
        done < /tmp/intel_debs.lock \
     && dpkg -i libigdgmm12_22.10.0_amd64.deb intel-igc-core-2_2.41.5+22716_amd64.deb \
@@ -56,7 +56,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ocl-icd-libopen
 WORKDIR /app
 
 # ComfyUI from the official release tarball (pinned ref; CI verifies sha256).
-RUN curl -fsSL "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${COMFY_REF}.tar.gz" \
+RUN curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors \
+        "https://github.com/Comfy-Org/ComfyUI/archive/refs/tags/${COMFY_REF}.tar.gz" \
         -o /tmp/comfy.tar.gz \
     && echo "7d796d74f42fe862eb55d1c217349fee92c2cac5d4ababe06c8b73f90c936dc0  /tmp/comfy.tar.gz" | sha256sum -c - \
     && tar -xzf /tmp/comfy.tar.gz -C /app --strip-components=1 \
@@ -81,10 +82,10 @@ RUN pip install comfy-kitchen==0.2.40 comfy-aimdo==0.6.0
 # keeps the xpu index: torch needs triton-xpu~=3.8.0 which PyPI does not carry.
 RUN TORCHWHL="torch-2.14.1+xpu-cp312-cp312-manylinux_2_28_x86_64.whl" && \
     TVWHL="torchvision-0.29.1+xpu-cp312-cp312-manylinux_2_28_x86_64.whl" && \
-    curl -fsSL -o "/tmp/$TORCHWHL" \
+    curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "/tmp/$TORCHWHL" \
         "https://download.pytorch.org/whl/xpu/torch-2.14.1%2Bxpu-cp312-cp312-manylinux_2_28_x86_64.whl" \
     && echo "a9fe5a5bffca6d6430028c532c010b9eae045489c069f77e6db3dc9f7d0cc59b  /tmp/$TORCHWHL" | sha256sum -c - \
-    && curl -fsSL -o "/tmp/$TVWHL" \
+    && curl -fsSL --retry 5 --retry-delay 10 --retry-all-errors -o "/tmp/$TVWHL" \
         "https://download.pytorch.org/whl/xpu/torchvision-0.29.1%2Bxpu-cp312-cp312-manylinux_2_28_x86_64.whl" \
     && echo "25c8cbd25528a04f8929333634d293868f1e4e826c6456a19e854e2a54081d72  /tmp/$TVWHL" | sha256sum -c - \
     && pip install --extra-index-url https://download.pytorch.org/whl/xpu \
