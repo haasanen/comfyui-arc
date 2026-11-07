@@ -105,11 +105,19 @@ jobs:
           set -euo pipefail
           IMG=ghcr.io/${{ github.repository }}
           VER=${{ steps.check.outputs.version }}
+          # Guard against the REMOTE: actions/checkout does not fetch tags
+          # (fetch-tags defaults to false), so a local rev-parse never sees an
+          # already-published v<ver>-h1 and the tag push dies "already exists"
+          # on every later "build anyway" run. If the git tag exists, this
+          # version's deploy artifact is published: skip re-tagging entirely
+          # (a rebuilt tree could otherwise move the live -h1 ghcr digest).
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VER}-h1" >/dev/null 2>&1; then
+            echo "v${VER}-h1 already published — deploy artifact intact, skipping promotion" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           docker tag "$IMG:$VER" "$IMG:${VER}-h1"
           docker push "$IMG:${VER}-h1"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git rev-parse -q --verify "refs/tags/v${VER}-h1" >/dev/null; then
-            git tag -m "auto-promote ${VER} -> deploy artifact ${VER}-h1" "v${VER}-h1"
-            git push origin "v${VER}-h1"
-          fi
+          git tag -m "auto-promote ${VER} -> deploy artifact ${VER}-h1" "v${VER}-h1"
+          git push origin "v${VER}-h1"
